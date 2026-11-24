@@ -211,7 +211,7 @@ renderer.setAnimationLoop(()=>{
  side+'UpperArm'
  );
  if(arm)arm.rotation.z=
- (side==='left'?-1:1)*1.25;
+ (side==='left'?1:-1)*1.25;
  }
  const chest=h.getNormalizedBoneNode('chest');
  if(chest)chest.rotation.x=

@@ -1,0 +1,281 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Ashen Realms</title>
+<style>
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: #090912;
+  color: #eee7ff;
+  font-family: system-ui, sans-serif;
+}
+header {
+  padding: 20px;
+  text-align: center;
+  border-bottom: 1px solid #44315f;
+}
+h1 {
+  font-family: Georgia, serif;
+  color: #c8a2ff;
+  letter-spacing: 5px;
+  margin: 0;
+}
+small { color: #a49ab8; }
+#scene {
+  height: 55dvh;
+  min-height: 280px;
+  position: relative;
+  background: radial-gradient(
+    ellipse, #302044, #090912
+  );
+}
+canvas {
+  display: block;
+  touch-action: none;
+}
+#status {
+  padding: 12px;
+  text-align: center;
+  color: #ba9ce9;
+}
+.controls {
+  padding: 12px;
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+}
+button {
+  flex: 1;
+  padding: 14px 8px;
+  background: #32214f;
+  border: 1px solid #7756aa;
+  color: white;
+  border-radius: 8px;
+  font-size: 14px;
+}
+</style>
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  }
+}
+</script>
+</head>
+<body>
+<header>
+  <h1>ASHEN REALMS</h1>
+  <small>SHADOW AWAKENING — ENGINE TEST</small>
+</header>
+<div id="scene"></div>
+<div id="status">Loading 3D engine...</div>
+<div class="controls">
+  <button id="idle">Idle</button>
+  <button id="walk">Walk</button>
+  <button id="run">Run</button>
+  <button id="reset">Reset view</button>
+</div>
+<div style="text-align:center;padding:12px">
+  <small>Drag to rotate · Pinch to zoom</small>
+</div>
+<script type="module">
+const status = document.getElementById("status");
+
+try {
+  const THREE = await import("three");
+  const { GLTFLoader } = await import(
+    "three/addons/loaders/GLTFLoader.js"
+  );
+  const { OrbitControls } = await import(
+    "three/addons/controls/OrbitControls.js"
+  );
+
+  const host = document.getElementById("scene");
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x100d1c);
+  scene.fog = new THREE.FogExp2(0x100d1c, 0.035);
+
+  const camera = new THREE.PerspectiveCamera(
+    40, host.clientWidth / host.clientHeight,
+    0.1, 100
+  );
+
+  camera.position.set(5, 3, 8);
+
+  const renderer = new THREE.WebGLRenderer({
+    antialias: true
+  });
+
+  renderer.setPixelRatio(
+    Math.min(window.devicePixelRatio, 2)
+  );
+  renderer.setSize(
+    host.clientWidth, host.clientHeight
+  );
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  host.appendChild(renderer.domElement);
+
+  const controls = new OrbitControls(
+    camera, renderer.domElement
+  );
+
+  controls.target.set(0, 1.5, 0);
+  controls.enableDamping = true;
+  controls.minDistance = 3;
+  controls.maxDistance = 14;
+  controls.maxPolarAngle = Math.PI / 2;
+  controls.update();
+  controls.saveState();
+
+  scene.add(new THREE.HemisphereLight(
+    0xc8baff, 0x302040, 2
+  ));
+
+  const key = new THREE.DirectionalLight(
+    0xffffff, 3
+  );
+  key.position.set(4, 8, 5);
+  key.castShadow = true;
+  key.shadow.mapSize.set(1024, 1024);
+  scene.add(key);
+
+  const rim = new THREE.PointLight(
+    0x8844ff, 45, 20
+  );
+  rim.position.set(-3, 3, -2);
+  scene.add(rim);
+
+  const floor = new THREE.Mesh(
+    new THREE.CircleGeometry(12, 96),
+    new THREE.MeshStandardMaterial({
+      color: 0x242032,
+      roughness: 0.65,
+      metalness: 0.3
+    })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  floor.receiveShadow = true;
+  scene.add(floor);
+
+  for (const radius of [2.3, 2.5]) {
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(
+        radius, radius + 0.025, 96
+      ),
+      new THREE.MeshBasicMaterial({
+        color: 0x9865ff,
+        side: THREE.DoubleSide
+      })
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.01;
+    scene.add(ring);
+  }
+
+  let mixer;
+  let current;
+  const actions = {};
+  const clock = new THREE.Clock();
+
+  function play(name) {
+    const next = actions[name];
+    if (!next || next === current) return;
+    if (current) current.fadeOut(0.3);
+    next.reset().fadeIn(0.3).play();
+    current = next;
+  }
+
+  status.textContent = "Loading textured test model...";
+
+  const loader = new GLTFLoader();
+
+  loader.load(
+    "https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb",
+    (gltf) => {
+      const model = gltf.scene;
+
+      const bounds = new THREE.Box3()
+        .setFromObject(model);
+      const size = bounds.getSize(
+        new THREE.Vector3()
+      );
+      const center = bounds.getCenter(
+        new THREE.Vector3()
+      );
+      const scale = 3 / size.y;
+
+      model.scale.setScalar(scale);
+      model.position.set(
+        -center.x * scale,
+        -bounds.min.y * scale,
+        -center.z * scale
+      );
+
+      model.traverse(object => {
+        if (object.isMesh) {
+          object.castShadow = true;
+          object.receiveShadow = true;
+        }
+      });
+
+      scene.add(model);
+      mixer = new THREE.AnimationMixer(model);
+
+      gltf.animations.forEach(clip => {
+        actions[clip.name] = mixer.clipAction(clip);
+      });
+
+      play("Idle");
+
+      status.textContent =
+        "3D engine ready — textured model loaded";
+    },
+    undefined,
+    () => {
+      status.textContent =
+        "Engine ready, but model download failed.";
+    }
+  );
+
+  document.getElementById("idle").onclick =
+    () => play("Idle");
+
+  document.getElementById("walk").onclick =
+    () => play("Walking");
+
+  document.getElementById("run").onclick =
+    () => play("Running");
+
+  document.getElementById("reset").onclick =
+    () => controls.reset();
+
+  new ResizeObserver(() => {
+    camera.aspect =
+      host.clientWidth / host.clientHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(
+      host.clientWidth, host.clientHeight
+    );
+  }).observe(host);
+
+  renderer.setAnimationLoop(() => {
+    const delta = Math.min(clock.getDelta(), 0.05);
+    if (mixer) mixer.update(delta);
+    controls.update();
+    renderer.render(scene, camera);
+  });
+
+} catch (error) {
+  status.textContent =
+    "Engine error: " + error.message;
+}
+</script>
+</body>
+</html>
